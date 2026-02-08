@@ -29,14 +29,14 @@
         
         <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">
-                输入列表 (格式：单词, 中文释义)
+                输入列表 (格式：西语内容 中文释义)
             </label>
             <textarea id="word-input" 
                 class="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-base bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm" 
-                placeholder="Gato, 猫&#10;La mano, 手&#10;Comer, 吃"></textarea>
+                placeholder="Gato 猫&#10;Tomar el pelo 嘲弄/开玩笑 (自动识别词组)&#10;Darse cuenta de 意识到&#10;La casa de papel 纸钞屋"></textarea>
             <div class="flex justify-between mt-2 text-xs text-gray-400">
-                <span>提示：动词会自动生成变位表供复习</span>
-                <span>每行一个单词</span>
+                <span>⚡️ 智能识别：支持多词短语，自动通过中文区分</span>
+                <span>每行一条</span>
             </div>
         </div>
 
@@ -59,7 +59,8 @@
             <!-- 单词卡片头部 -->
             <div class="bg-gradient-to-br from-indigo-900 to-blue-900 text-white p-12 text-center relative">
                 <div class="flex flex-col items-center justify-center gap-3">
-                    <h2 id="current-word" class="text-6xl font-bold tracking-tight mb-1 capitalize drop-shadow-md">Word</h2>
+                    <!-- 使用 break-words 防止长短语溢出，并调整字体大小自适应 -->
+                    <h2 id="current-word" class="text-4xl md:text-5xl font-bold tracking-tight mb-1 capitalize drop-shadow-md break-words max-w-full">Word</h2>
                 </div>
             </div>
 
@@ -136,23 +137,50 @@
 
             vocabulary = lines.map(line => {
                 let word, meaning;
+                line = line.trim();
+
+                // 1. 优先尝试逗号分隔 (显式分隔最安全)
                 const commaSplit = line.split(/[,，]/);
                 
                 if (commaSplit.length > 1) {
                     word = commaSplit[0].trim();
                     meaning = commaSplit.slice(1).join(",").trim();
                 } else {
-                    const parts = line.trim().split(/\s+/);
-                    const first = parts[0].toLowerCase();
-                    // 兼容带冠词输入的情况，只为提取单词主体
-                    if (['el', 'la', 'un', 'una', 'los', 'las'].includes(first) && parts.length >= 2) {
-                        word = parts[0] + " " + parts[1];
-                        meaning = parts.slice(2).join(" ");
+                    // 2. 智能分隔：寻找第一个中文字符的位置
+                    // 只要有中文，我们就假设中文开始的地方就是释义的开始
+                    const chineseIndex = line.search(/[\u4e00-\u9fa5]/);
+                    
+                    if (chineseIndex !== -1) {
+                        word = line.substring(0, chineseIndex).trim();
+                        meaning = line.substring(chineseIndex).trim();
                     } else {
-                        word = parts[0];
-                        meaning = parts.slice(1).join(" ");
+                        // 3. 如果没有逗号也没有中文 (纯西语环境或格式不标准)
+                        // 尝试使用空格分割的兜底策略
+                        const parts = line.split(/\s+/);
+                        const first = parts[0].toLowerCase();
+                        
+                        // 如果是冠词开头，倾向于认为前两个词是整体 (如 El Gato)
+                        if (['el', 'la', 'un', 'una', 'los', 'las'].includes(first) && parts.length >= 2) {
+                            if (parts.length === 2) {
+                                word = parts.join(" "); // 例如 "El Gato"，没有意思
+                                meaning = "???";
+                            } else {
+                                word = parts[0] + " " + parts[1];
+                                meaning = parts.slice(2).join(" ");
+                            }
+                        } else {
+                            // 默认取第一个词，后面全是意思 (旧逻辑)
+                            if (parts.length > 1) {
+                                word = parts[0];
+                                meaning = parts.slice(1).join(" ");
+                            } else {
+                                word = line;
+                                meaning = "???";
+                            }
+                        }
                     }
                 }
+                
                 if(!meaning) meaning = "???";
 
                 let type = guessType(word);
@@ -177,40 +205,91 @@
         }
 
         function getWordBody(text) {
+            // 移除开头的冠词，为了变位和分析更准确
             return text.replace(/^(el|la|los|las|un|una)\s+/i, '');
         }
 
-        // 依然保留判断逻辑，为了生成动词变位表（这属于知识点，不是标签）
         function guessType(word) {
             let body = getWordBody(word).toLowerCase();
+            // 简单判断：如果以ar/er/ir结尾，认为是动词
+            // 注意：对于短语 "Tomar el pelo"，wordBody 是 "Tomar el pelo"，结尾是 o，可能判错
+            // 改进：如果是多词短语，检查第一个词是否是动词
+            
+            const parts = body.split(/\s+/);
+            const firstWord = parts[0];
+            
+            if (firstWord.endsWith('ar') || firstWord.endsWith('er') || firstWord.endsWith('ir')) {
+                 if (firstWord.length >= 2) return 'verb';
+            }
+            // 兜底：检查整个串结尾 (针对单个词)
             if (body.endsWith('ar') || body.endsWith('er') || body.endsWith('ir')) {
                 if (body.length >= 2) return 'verb';
             }
+
             return 'noun';
         }
 
         function generateConjugations(wordBody) {
+            // 对于短语，我们只对第一个词进行变位推测
             let w = wordBody.toLowerCase();
-            const ending = w.slice(-2);
-            const stem = w.slice(0, -2);
+            const parts = w.split(/\s+/);
+            const verb = parts[0]; // 取第一个词变位，比如 "tomar"
+            const rest = parts.length > 1 ? " " + parts.slice(1).join(" ") : ""; // 保留剩余部分 " el pelo"
+
+            const ending = verb.slice(-2);
+            const stem = verb.slice(0, -2);
+            
+            // 简单的规则变位逻辑
             let part = (ending === 'ar') ? stem + 'ado' : stem + 'ido';
             const endings = {
                 ar: { pres: ['o','as','a','amos','áis','an'], pas: ['é','aste','ó','amos','asteis','aron'] },
                 er: { pres: ['o','es','e','emos','éis','en'], pas: ['í','iste','ió','imos','isteis','ieron'] },
                 ir: { pres: ['o','es','e','imos','ís','en'], pas: ['í','iste','ió','imos','isteis','ieron'] }
             };
-            let e = endings[ending] || endings['ar'];
+            
+            // 如果不是规则结尾，默认按 ar 处理防止报错，或者提示无法变位
+            let e = endings[ending] || endings['ar']; 
+            
+            // 生成变位时，要把剩余的短语加上去
+            // 例如: yo tomo el pelo
             return {
-                presente: makeGrid(stem, e.pres),
-                pasado: makeGrid(stem, e.pas),
-                perfecto: makePerf(part),
-                futuro: makeFut(w)
+                presente: makeGrid(stem, e.pres, rest),
+                pasado: makeGrid(stem, e.pas, rest),
+                perfecto: makePerf(part, rest),
+                futuro: makeFut(verb, rest)
             };
         }
 
-        function makeGrid(stem, s) { return { yo: stem+s[0], tu: stem+s[1], el: stem+s[2], nos: stem+s[3], vos: stem+s[4], ellos: stem+s[5] }; }
-        function makePerf(part) { return { yo: 'había '+part, tu: 'habías '+part, el: 'había '+part, nos: 'habíamos '+part, vos: 'habíais '+part, ellos: 'habían '+part }; }
-        function makeFut(inf) { return { yo: inf+'é', tu: inf+'ás', el: inf+'á', nos: inf+'emos', vos: inf+'éis', ellos: inf+'án' }; }
+        function makeGrid(stem, s, rest) { 
+            return { 
+                yo: stem+s[0]+rest, 
+                tu: stem+s[1]+rest, 
+                el: stem+s[2]+rest, 
+                nos: stem+s[3]+rest, 
+                vos: stem+s[4]+rest, 
+                ellos: stem+s[5]+rest 
+            }; 
+        }
+        function makePerf(part, rest) { 
+            return { 
+                yo: 'había '+part+rest, 
+                tu: 'habías '+part+rest, 
+                el: 'había '+part+rest, 
+                nos: 'habíamos '+part+rest, 
+                vos: 'habíais '+part+rest, 
+                ellos: 'habían '+part+rest 
+            }; 
+        }
+        function makeFut(inf, rest) { 
+            return { 
+                yo: inf+'é'+rest, 
+                tu: inf+'ás'+rest, 
+                el: inf+'á'+rest, 
+                nos: inf+'emos'+rest, 
+                vos: inf+'éis'+rest, 
+                ellos: inf+'án'+rest 
+            }; 
+        }
 
         // --- 3. UI 交互 ---
 
@@ -225,9 +304,9 @@
         function renderCard() {
             isAnswered = false;
             const data = vocabulary[currentIndex];
-            // 显示单词主体
-            document.getElementById('current-word').innerText = data.wordBody;
-            // 移除了 Type 显示
+            // 显示完整单词或短语
+            document.getElementById('current-word').innerText = data.original; // 使用 original 显示完整输入
+            
             document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${vocabulary.length}`;
             
             const input = document.getElementById('user-answer');
@@ -238,7 +317,6 @@
             document.getElementById('check-btn').style.display = 'block';
             document.getElementById('feedback-msg').classList.add('hidden');
             document.getElementById('grammar-panel').classList.add('hidden');
-            // 移除了自动播放发音
         }
 
         function checkAnswer() {
