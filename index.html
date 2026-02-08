@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spanish Vocabulary Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8fafc;
+        }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-btn.active {
+            border-bottom: 2px solid #4f46e5;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+        .tab-btn {
+            color: #64748b;
+            padding-bottom: 8px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: #4f46e5; }
+        input:focus { outline: none; border-color: #6366f1; ring: 2px solid #e0e7ff; }
+        .conjugation-scroll::-webkit-scrollbar { height: 6px; }
+        .conjugation-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .conjugation-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- 1. 数据录入页 -->
+    <div id="setup-view" class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-8 fade-in">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+            <span>🇪🇸</span> 词汇特训
+        </h1>
+        <p class="text-gray-500 mb-6">请输入单词和中文释义。系统会自动加载西班牙语发音和语法。</p>
+        
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                输入列表 (格式：单词, 中文释义)
+            </label>
+            <textarea id="word-input" 
+                class="w-full h-80 p-4 border border-gray-300 rounded-lg font-mono text-base bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm" 
+                placeholder="Gato, 猫&#10;Comer, 吃&#10;El problema, 问题&#10;La mano, 手"></textarea>
+            <div class="flex justify-between mt-2 text-xs text-gray-400">
+                <span>💡 建议使用逗号分隔，支持带冠词输入 (如 El mapa)</span>
+                <span>每行一个单词</span>
+            </div>
+        </div>
+
+        <button onclick="processWords()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-6 rounded-lg transition duration-200 shadow-md flex justify-center items-center gap-2">
+            <span>开始记忆</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+        </button>
+    </div>
+
+    <!-- 2. 学习/答题页 -->
+    <div id="game-view" class="w-full max-w-2xl hidden flex flex-col gap-4">
+        
+        <!-- 顶部栏 -->
+        <div class="flex justify-between items-center text-sm font-medium text-gray-500 px-1">
+            <button onclick="resetApp()" class="hover:text-indigo-600 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                重新编辑
+            </button>
+            <span id="progress-text" class="bg-white px-3 py-1 rounded-full shadow-sm">1 / 10</span>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden fade-in border border-gray-100">
+            
+            <!-- 单词卡片头部 -->
+            <div class="bg-gradient-to-br from-indigo-900 to-blue-900 text-white p-8 text-center relative">
+                <div class="flex flex-col items-center justify-center gap-3">
+                    <h2 id="current-word" class="text-5xl font-bold tracking-tight mb-1 capitalize drop-shadow-md">Word</h2>
+                    
+                    <button onclick="playCurrentAudio()" class="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-1.5 rounded-full text-sm backdrop-blur-sm transition group border border-white/10">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-yellow-400 group-hover:scale-110 transition" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 11H2a1 1 0 01-1-1V9a1 1 0 011-1h2.586l3.814-3.823a1 1 0 011.183-.1zM11 5.11a1 1 0 01.83.92 5.002 5.002 0 000 7.94 1 1 0 11-.83 1.92 7.002 7.002 0 010-11.88 1 1 0 010 .92z" clip-rule="evenodd" /></svg>
+                        <span>听发音 (Escuchar)</span>
+                    </button>
+                </div>
+                <span id="word-type" class="absolute top-4 right-4 bg-white/20 px-2 py-0.5 rounded text-xs uppercase tracking-wide font-semibold text-indigo-100">Type</span>
+            </div>
+
+            <div class="p-6 sm:p-8">
+                
+                <!-- 答题区域 -->
+                <div id="quiz-area" class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="user-answer">
+                        请输入中文含义：
+                    </label>
+                    <div class="flex gap-2">
+                        <input id="user-answer" type="text" class="flex-1 appearance-none border border-gray-300 rounded-lg py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:border-indigo-500 transition shadow-sm text-lg" placeholder="例如：猫" autocomplete="off">
+                        <button id="check-btn" onclick="checkAnswer()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-md">
+                            检查
+                        </button>
+                    </div>
+                    
+                    <!-- 反馈信息 -->
+                    <div id="feedback-msg" class="mt-4 hidden rounded-lg p-4 text-center font-bold text-lg animate-pulse"></div>
+                </div>
+
+                <!-- 语法详情面板 (答题后显示) -->
+                <div id="grammar-panel" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div class="border-t border-gray-100 my-6"></div>
+                    
+                    <!-- 1. 动词变位区域 -->
+                    <div id="verb-section" class="hidden">
+                        <h3 class="text-gray-800 font-bold mb-4 flex items-center gap-2">
+                            <span class="w-1 h-6 bg-indigo-500 rounded-full"></span>
+                            动词变位 (Conjugación)
+                        </h3>
+                        
+                        <!-- Tabs -->
+                        <div class="flex border-b border-gray-200 mb-4 text-sm overflow-x-auto gap-6 whitespace-nowrap px-1">
+                            <button onclick="switchTab('presente')" class="tab-btn active" id="tab-presente">现在时</button>
+                            <button onclick="switchTab('pasado')" class="tab-btn" id="tab-pasado">一般过去时</button>
+                            <button onclick="switchTab('perfecto')" class="tab-btn" id="tab-perfecto">过去完成时</button>
+                            <button onclick="switchTab('futuro')" class="tab-btn" id="tab-futuro">将来时</button>
+                        </div>
+
+                        <!-- 变位内容容器 -->
+                        <div class="bg-gray-50 rounded-lg p-4 border border-gray-100 text-sm">
+                            <div id="content-presente" class="conjugation-content grid grid-cols-2 gap-y-2 gap-x-4"></div>
+                            <div id="content-pasado" class="conjugation-content grid grid-cols-2 gap-y-2 gap-x-4 hidden"></div>
+                            <div id="content-perfecto" class="conjugation-content grid grid-cols-2 gap-y-2 gap-x-4 hidden"></div>
+                            <div id="content-futuro" class="conjugation-content grid grid-cols-2 gap-y-2 gap-x-4 hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 名词/形容词区域 -->
+                    <div id="noun-section" class="hidden">
+                        <h3 class="text-gray-800 font-bold mb-4 flex items-center gap-2">
+                            <span class="w-1 h-6 bg-pink-500 rounded-full"></span>
+                            语法属性
+                        </h3>
+                        
+                        <!-- 阴阳性显示卡片 -->
+                        <div class="bg-pink-50 rounded-lg p-5 border border-pink-100 flex items-center justify-between">
+                            <div>
+                                <span class="text-gray-500 text-xs uppercase font-bold tracking-wider block mb-1">阴阳性 (Género)</span>
+                                <div class="flex items-baseline gap-2">
+                                    <span id="article-display" class="text-3xl font-serif italic text-pink-600 font-bold">El</span>
+                                    <span id="gender-word-display" class="text-xl text-gray-800">...</span>
+                                </div>
+                                <span id="gender-label" class="text-sm text-pink-500 mt-1 block">Masculino</span>
+                            </div>
+
+                            <!-- 修正按钮 -->
+                            <button onclick="toggleGender()" class="text-xs bg-white border border-pink-200 text-pink-500 hover:bg-pink-100 px-3 py-1 rounded transition">
+                                切换阴阳性 ↻
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 下一题按钮 -->
+                    <button id="next-btn" onclick="nextCard()" class="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transform transition hover:-translate-y-0.5 flex justify-center items-center gap-2">
+                        <span>下一个单词</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 结束页 -->
+    <div id="end-view" class="w-full max-w-md bg-white rounded-xl shadow-lg p-8 text-center hidden fade-in">
+        <div class="text-6xl mb-4 animate-bounce">🎉</div>
+        <h2 class="text-3xl font-bold text-gray-800 mb-2">复习完成！</h2>
+        <p class="text-gray-500 mb-8">所有单词已完成测试。</p>
+        <button onclick="resetApp()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition shadow-md">
+            输入新单词
+        </button>
+    </div>
+
+    <script>
+        // --- 语音引擎 (核心修复版) ---
+        let voices = [];
+        
+        function loadVoices() {
+            voices = window.speechSynthesis.getVoices();
+        }
+
+        // 尝试立即加载
+        loadVoices();
+        
+        // 兼容 Chrome 等需要事件触发的浏览器
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        function playAudio(text) {
+            if (!window.speechSynthesis) {
+                alert("抱歉，您的浏览器不支持语音播放");
+                return;
+            }
+            
+            // 防御性编程：如果声音列表为空，再次尝试获取
+            if (voices.length === 0) {
+                voices = window.speechSynthesis.getVoices();
+            }
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // --- 关键修改：暴力寻找西班牙语语音 ---
+            // 优先找 es-ES (西班牙)，其次 es-MX (墨西哥)，最后找任意 'es' 开头的
+            const esVoice = voices.find(v => v.lang.includes('es-ES')) || 
+                            voices.find(v => v.lang.includes('es-MX')) || 
+                            voices.find(v => v.lang.includes('es-US')) || 
+                            voices.find(v => v.lang.toLowerCase().startsWith('es'));
+
+            if (esVoice) {
+                utterance.voice = esVoice;
+                utterance.lang = esVoice.lang;
+            } else {
+                // 如果没有找到特定语音包，强制指定语言代码
+                // 大多数现代浏览器（尤其是移动端）会根据这个代码自动调用正确的网络合成器
+                utterance.lang = 'es-ES';
+            }
+
+            utterance.rate = 0.8; // 0.8倍速，适合学习
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // --- 核心逻辑 ---
+
+        let vocabulary = [];
+        let currentIndex = 0;
+        let isAnswered = false;
+
+        const EXCEPTIONS = {
+            'mano': 'f', 'foto': 'f', 'moto': 'f', 'radio': 'f',
+            'dia': 'm', 'día': 'm', 'mapa': 'm', 'planeta': 'm', 'problema': 'm', 'sistema': 'm', 'tema': 'm', 'idioma': 'm', 'sofá': 'm'
+        };
+
+        function processWords() {
+            const rawInput = document.getElementById('word-input').value;
+            const lines = rawInput.split('\n').filter(line => line.trim() !== '');
+
+            if (lines.length === 0) {
+                alert("请至少输入一个单词！");
+                return;
+            }
+
+            vocabulary = lines.map(line => {
+                let word, meaning;
+                
+                // --- 优化的解析逻辑 ---
+                // 1. 优先尝试按逗号分割 (中英文逗号)
+                const commaSplit = line.split(/[,，]/);
+                
+                if (commaSplit.length > 1) {
+                    // 如果有逗号，逗号前是单词，逗号后是意思
+                    word = commaSplit[0].trim();
+                    meaning = commaSplit.slice(1).join(",").trim();
+                } else {
+                    // 2. 如果没有逗号，尝试按第一个空格分割（兼容 "El Gato 猫"）
+                    // 逻辑：找到第一个非西语字符？或者简单地按最后一个空格？
+                    // 简单粗暴有效的方法：按空格切分，如果第一部分是El/La/Un/Una，则取前两个词作为单词
+                    const parts = line.trim().split(/\s+/);
+                    const firstPart = parts[0].toLowerCase();
+                    
+                    if (['el', 'la', 'un', 'una', 'los', 'las'].includes(firstPart) && parts.length > 2) {
+                        // 例子: "El problema 问题" -> word="El problema", meaning="问题"
+                        word = parts[0] + " " + parts[1];
+                        meaning = parts.slice(2).join(" ");
+                    } else if (parts.length > 1) {
+                        // 例子: "Gato 猫" -> word="Gato", meaning="猫"
+                        word = parts[0];
+                        meaning = parts.slice(1).join(" ");
+                    } else {
+                        word = line.trim();
+                        meaning = "???";
+                    }
+                }
+
+                let type = guessType(word);
+                let data = {
+                    word: word,
+                    meaning: meaning,
+                    type: type,
+                };
+
+                if (type === 'verb') {
+                    data.conjugation = generateConjugations(data.word);
+                } else {
+                    data.genderData = guessGender(data.word);
+                }
+
+                return data;
+            });
+
+            vocabulary.sort(() => Math.random() - 0.5);
+            startSession();
+        }
+
+        function guessType(word) {
+            let w = word.toLowerCase();
+            w = w.replace(/^(el|la|los|las|un|una)\s+/, '');
+            
+            if (w.endsWith('ar') || w.endsWith('er') || w.endsWith('ir')) {
+                if (w.length >= 2) return 'verb';
+            }
+            return 'noun';
+        }
+
+        function guessGender(originalWord) {
+            let w = originalWord.toLowerCase().trim();
+            
+            // 1. 强力依据：用户输入的冠词
+            if (w.startsWith('el ') || w.startsWith('un ') || w.startsWith('los ')) return { gender: 'm', article: 'El' };
+            if (w.startsWith('la ') || w.startsWith('una ') || w.startsWith('las ')) return { gender: 'f', article: 'La' };
+
+            // 2. 移除冠词进行词尾判断 (以防用户输入了 El Gato，但上面逻辑漏了)
+            const cleanWord = w.replace(/^(el|la|los|las|un|una)\s+/, '');
+
+            // 3. 例外检查
+            if (EXCEPTIONS[cleanWord]) {
+                return EXCEPTIONS[cleanWord] === 'm' ? { gender: 'm', article: 'El' } : { gender: 'f', article: 'La' };
+            }
+
+            // 4. 词尾规则
+            if (cleanWord.endsWith('dad') || cleanWord.endsWith('cion') || cleanWord.endsWith('ción') || cleanWord.endsWith('sión') || cleanWord.endsWith('tud')) {
+                return { gender: 'f', article: 'La' };
+            }
+            // 默认判断
+            if (cleanWord.endsWith('a')) return { gender: 'f', article: 'La' };
+            
+            // 默认为阳性
+            return { gender: 'm', article: 'El' }; 
+        }
+
+        window.toggleGender = function() {
+            const data = vocabulary[currentIndex];
+            if (data.type !== 'noun') return;
+
+            if (data.genderData.gender === 'm') {
+                data.genderData = { gender: 'f', article: 'La' };
+            } else {
+                data.genderData = { gender: 'm', article: 'El' };
+            }
+            updateGenderDisplay(data);
+        }
+
+        function updateGenderDisplay(data) {
+            document.getElementById('article-display').innerText = data.genderData.article;
+            document.getElementById('article-display').className = 
+                `text-3xl font-serif italic font-bold ${data.genderData.gender === 'm' ? 'text-blue-600' : 'text-pink-600'}`;
+            
+            document.getElementById('gender-word-display').innerText = data.word;
+            document.getElementById('gender-label').innerText = 
+                data.genderData.gender === 'm' ? 'Masculino (阳性)' : 'Femenino (阴性)';
+            document.getElementById('gender-label').className = 
+                `text-sm mt-1 block ${data.genderData.gender === 'm' ? 'text-blue-500' : 'text-pink-500'}`;
+        }
+
+        function generateConjugations(word) {
+            let w = word.toLowerCase().trim();
+            w = w.replace(/^(el|la|los|las|un|una)\s+/, '');
+            
+            const ending = w.slice(-2);
+            const stem = w.slice(0, -2);
+            
+            let participlio = (ending === 'ar') ? stem + 'ado' : stem + 'ido';
+
+            let pres = {};
+            if (ending === 'ar') pres = { yo: 'o', tu: 'as', el: 'a', nos: 'amos', vos: 'áis', ellos: 'an' };
+            else if (ending === 'er') pres = { yo: 'o', tu: 'es', el: 'e', nos: 'emos', vos: 'éis', ellos: 'en' };
+            else if (ending === 'ir') pres = { yo: 'o', tu: 'es', el: 'e', nos: 'imos', vos: 'ís', ellos: 'en' };
+            const presente = mapStems(stem, pres);
+
+            let pas = {};
+            if (ending === 'ar') pas = { yo: 'é', tu: 'aste', el: 'ó', nos: 'amos', vos: 'asteis', ellos: 'aron' };
+            else if (ending === 'er' || ending === 'ir') pas = { yo: 'í', tu: 'iste', el: 'ió', nos: 'imos', vos: 'isteis', ellos: 'ieron' };
+            const pasado = mapStems(stem, pas);
+
+            const perfecto = {
+                yo: `había ${participlio}`,
+                tu: `habías ${participlio}`,
+                el: `había ${participlio}`,
+                nosotros: `habíamos ${participlio}`,
+                vosotros: `habíais ${participlio}`,
+                ellos: `habían ${participlio}`
+            };
+
+            const fut = { yo: 'é', tu: 'ás', el: 'á', nos: 'emos', vos: 'éis', ellos: 'án' };
+            const futuro = mapStems(w, fut); 
+
+            return { presente, pasado, perfecto, futuro };
+        }
+
+        function mapStems(stem, endings) {
+            return {
+                yo: stem + endings.yo,
+                tu: stem + endings.tu,
+                el: stem + endings.el,
+                nosotros: stem + (endings.nos || endings.nosotros),
+                vosotros: stem + (endings.vos || endings.vosotros),
+                ellos: stem + endings.ellos
+            };
+        }
+
+        function startSession() {
+            document.getElementById('setup-view').classList.add('hidden');
+            document.getElementById('end-view').classList.add('hidden');
+            document.getElementById('game-view').classList.remove('hidden');
+            currentIndex = 0;
+            renderCard();
+        }
+
+        function renderCard() {
+            isAnswered = false;
+            const data = vocabulary[currentIndex];
+
+            // 显示时不带冠词（为了美观），但阴阳性面板会显示
+            const displayWord = data.word.replace(/^(el|la|un|una)\s+/i, '');
+            document.getElementById('current-word').innerText = displayWord;
+            
+            document.getElementById('word-type').innerText = data.type === 'verb' ? 'Verbo' : 'Sustantivo';
+            document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${vocabulary.length}`;
+            
+            const input = document.getElementById('user-answer');
+            input.value = '';
+            input.disabled = false;
+            input.classList.remove('border-green-500', 'border-red-500', 'bg-green-50', 'bg-red-50');
+            input.focus();
+
+            document.getElementById('check-btn').style.display = 'block';
+            document.getElementById('feedback-msg').classList.add('hidden');
+            document.getElementById('grammar-panel').classList.add('hidden');
+
+            setTimeout(() => playAudio(displayWord), 300);
+        }
+
+        function checkAnswer() {
+            if (isAnswered) return;
+
+            const input = document.getElementById('user-answer');
+            const feedback = document.getElementById('feedback-msg');
+            const checkBtn = document.getElementById('check-btn');
+            const data = vocabulary[currentIndex];
+            
+            const userVal = input.value.trim();
+            if (!userVal) return;
+
+            isAnswered = true;
+            input.disabled = true;
+            checkBtn.style.display = 'none';
+            feedback.classList.remove('hidden');
+
+            const isCorrect = userVal === data.meaning || data.meaning.includes(userVal);
+
+            if (isCorrect) {
+                feedback.innerHTML = `<span class="text-green-600">✅ 回答正确！</span> <span class="text-gray-600 text-sm ml-2">(${data.meaning})</span>`;
+                feedback.className = "mt-4 rounded-lg p-4 text-center font-bold text-lg bg-green-100 border border-green-200";
+                input.classList.add('border-green-500', 'bg-green-50');
+            } else {
+                feedback.innerHTML = `<span class="text-red-600">❌ 正确答案：${data.meaning}</span>`;
+                feedback.className = "mt-4 rounded-lg p-4 text-center font-bold text-lg bg-red-100 border border-red-200";
+                input.classList.add('border-red-500', 'bg-red-50');
+            }
+
+            showGrammarInfo(data);
+        }
+
+        function showGrammarInfo(data) {
+            const panel = document.getElementById('grammar-panel');
+            panel.classList.remove('hidden');
+
+            document.getElementById('verb-section').classList.add('hidden');
+            document.getElementById('noun-section').classList.add('hidden');
+
+            if (data.type === 'verb') {
+                document.getElementById('verb-section').classList.remove('hidden');
+                renderConjugationTab(data.conjugation);
+                switchTab('presente');
+            } else {
+                document.getElementById('noun-section').classList.remove('hidden');
+                updateGenderDisplay(data);
+            }
+        }
+
+        function renderConjugationTab(c) {
+            fillGrid('content-presente', c.presente);
+            fillGrid('content-pasado', c.pasado);
+            fillGrid('content-perfecto', c.perfecto);
+            fillGrid('content-futuro', c.futuro);
+        }
+
+        function fillGrid(id, tenseData) {
+            const el = document.getElementById(id);
+            el.innerHTML = `
+                <div><span class="text-gray-400 font-mono text-xs">Yo</span> <span class="font-bold text-gray-800">${tenseData.yo}</span></div>
+                <div><span class="text-gray-400 font-mono text-xs">Nos</span> <span class="font-bold text-gray-800">${tenseData.nosotros}</span></div>
+                <div><span class="text-gray-400 font-mono text-xs">Tú</span> <span class="font-bold text-gray-800">${tenseData.tu}</span></div>
+                <div><span class="text-gray-400 font-mono text-xs">Vos</span> <span class="font-bold text-gray-800">${tenseData.vosotros}</span></div>
+                <div><span class="text-gray-400 font-mono text-xs">Él</span> <span class="font-bold text-gray-800">${tenseData.el}</span></div>
+                <div><span class="text-gray-400 font-mono text-xs">Ellos</span> <span class="font-bold text-gray-800">${tenseData.ellos}</span></div>
+            `;
+        }
+
+        window.switchTab = function(tense) {
+            document.querySelectorAll('.conjugation-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(`content-${tense}`).classList.remove('hidden');
+            document.getElementById(`tab-${tense}`).classList.add('active');
+        }
+
+        function nextCard() {
+            currentIndex++;
+            if (currentIndex >= vocabulary.length) {
+                document.getElementById('game-view').classList.add('hidden');
+                document.getElementById('end-view').classList.remove('hidden');
+            } else {
+                renderCard();
+            }
+        }
+
+        function resetApp() {
+            document.getElementById('end-view').classList.add('hidden');
+            document.getElementById('game-view').classList.add('hidden');
+            document.getElementById('setup-view').classList.remove('hidden');
+        }
+
+        document.getElementById('user-answer').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                if(!isAnswered) checkAnswer();
+                else nextCard();
+            }
+        });
+
+        function playCurrentAudio() {
+            const data = vocabulary[currentIndex];
+            const displayWord = data.word.replace(/^(el|la|un|una)\s+/i, '');
+            playAudio(displayWord);
+        }
+
+    </script>
+</body>
+</html>
